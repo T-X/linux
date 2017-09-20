@@ -96,6 +96,22 @@
 		compatible = "arm,cortex-a5-scu";
 		reg = <0xc4300000 0x100>;
 	};
+
+	soc {
+		vusb_d: regulator-vusb_d {
+			compatible = "regulator-fixed";
+			regulator-name = "vusb_d";
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+		};
+
+		vusb_a: regulator-vusb_a {
+			compatible = "regulator-fixed";
+			regulator-name = "vusb_a";
+			regulator-min-microvolt = <1100000>;
+			regulator-max-microvolt = <1100000>;
+		};
+	};
 }; /* end of / */
 
 &aobus {
@@ -235,6 +251,9 @@
 
 &usb1 {
 	compatible = "amlogic,meson8b-usb", "snps,dwc2";
+	interrupts = <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>;
+	vusb_d-supply = <&vusb_d>;
+	vusb_a-supply = <&vusb_a>;
 	clocks = <&clkc CLKID_USB1_DDR_BRIDGE>;
 	clock-names = "otg";
 };
