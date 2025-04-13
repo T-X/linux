@@ -1135,24 +1135,48 @@ static void br_ip6_multicast_update_active(struct net_bridge_mcast *brmctx,
 #endif
 }
 
-static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
-				       bool ip4_active_old, bool ip6_active_old)
+static int br_multicast_notify_active(struct net_bridge_mcast *brmctx,
+				      bool ip4_active_old, bool ip6_active_old,
+				      struct netlink_ext_ack *extack)
 {
 	int ip4_active = brmctx->ip4_active;
 	int ip6_active = brmctx->ip6_active;
+	int err;
 
-	if (ip4_active == ip4_active_old &&
-	    ip6_active == ip6_active_old)
-		return;
+	struct switchdev_attr attr = {
+		.orig_dev = brmctx->br->dev,
+		.id = SWITCHDEV_ATTR_ID_BRIDGE_MC_ACTIVE,
+		.flags = SWITCHDEV_F_DEFER,
+		.u.mc_active = {
+			.vid = brmctx->vlan ? brmctx->vlan->vid : -1,
+			.ip4 = ip4_active,
+			.ip6 = ip6_active,
+			.ip4_changed = ip4_active != ip4_active_old,
+			.ip6_changed = ip6_active != ip6_active_old,
+		},
+	};
+
+	if (!attr.u.mc_active.ip4_changed &&
+	    !attr.u.mc_active.ip6_changed)
+		return 0;
+
+	err = switchdev_port_attr_set(brmctx->br->dev, &attr, extack);
+	if (err && err != -EOPNOTSUPP) {
+		br_err(brmctx->br, "failed to notify mc_active change, err: %i\n", err);
+		return err;
+	}
 
 	br_debug(brmctx->br, "mc_active changed, vid: %i: v4: %i->%i, v6: %i->%i\n",
 		 brmctx->vlan ? brmctx->vlan->vid : -1,
 		 ip4_active_old, ip4_active, ip6_active_old, ip6_active);
+
+	return 0;
 }
 
 /**
  * br_multicast_update_active() - update mcast active state
  * @brmctx: the bridge multicast context to check
+ * @extack: netlink extended ACK structure
  *
  * This (potentially) updates the IPv4/IPv6 multicast active state. And by
  * that enables or disables snooping of multicast payload traffic in fast
@@ -1169,12 +1193,18 @@ static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
  *
  * This function should be called by anything that changes one of the
  * above prerequisites.
+ *
+ * Any multicast active state toggling is further notified to switchdev.
+ *
+ * Return: 0 on success, a negative value otherwise.
  */
-static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
+static int br_multicast_update_active(struct net_bridge_mcast *brmctx,
+				      struct netlink_ext_ack *extack)
 {
 	bool ip4_active_old = brmctx->ip4_active;
 	bool ip6_active_old = brmctx->ip6_active;
 	bool force_inactive = false;
+	int err;
 
 	lockdep_assert_held_once(&brmctx->br->multicast_lock);
 
@@ -1211,7 +1241,15 @@ update:
 	br_ip4_multicast_update_active(brmctx, force_inactive);
 	br_ip6_multicast_update_active(brmctx, force_inactive);
 
-	br_multicast_notify_active(brmctx, ip4_active_old, ip6_active_old);
+	err = br_multicast_notify_active(brmctx, ip4_active_old, ip6_active_old, extack);
+	if (err) {
+		/* notification failed (out-of-memory?), rollback */
+		WRITE_ONCE(brmctx->ip4_active, ip4_active_old);
+		WRITE_ONCE(brmctx->ip6_active, ip6_active_old);
+		return err;
+	}
+
+	return 0;
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1292,12 +1330,12 @@ static struct sk_buff *br_ip6_multicast_alloc_query(struct net_bridge_mcast *brm
 			       &ip6h->daddr, 0, &ip6h->saddr)) {
 		kfree_skb(skb);
 		br_opt_toggle(brmctx->br, BROPT_HAS_IPV6_ADDR, false);
-		br_multicast_update_active(brmctx);
+		br_multicast_update_active(brmctx, NULL);
 		return NULL;
 	}
 
 	br_opt_toggle(brmctx->br, BROPT_HAS_IPV6_ADDR, true);
-	br_multicast_update_active(brmctx);
+	br_multicast_update_active(brmctx, NULL);
 	ipv6_eth_mc_map(&ip6h->daddr, eth->h_dest);
 
 	hopopt = (u8 *)(ip6h + 1);
@@ -1438,13 +1476,24 @@ static void br_multicast_assert_inactive(struct net_bridge_mcast *brmctx)
 	br_ip6_multicast_assert_inactive(brmctx);
 }
 
-static void br_multicast_toggle_enabled(struct net_bridge *br, bool on)
+static int br_multicast_toggle_enabled(struct net_bridge *br, bool on,
+				       struct netlink_ext_ack *extack)
 {
+	int old = br_opt_get(br, BROPT_MULTICAST_ENABLED);
+	int err;
+
 	br_opt_toggle(br, BROPT_MULTICAST_ENABLED, on);
-	br_multicast_update_active(&br->multicast_ctx);
+
+	err = br_multicast_update_active(&br->multicast_ctx, extack);
+	if (err) {
+		br_opt_toggle(br, BROPT_MULTICAST_ENABLED, old);
+		return err;
+	}
 
 	if (!on)
 		br_multicast_assert_inactive(&br->multicast_ctx);
+
+	return 0;
 }
 
 struct net_bridge_mdb_entry *br_multicast_new_group(struct net_bridge *br,
@@ -1460,7 +1509,7 @@ struct net_bridge_mdb_entry *br_multicast_new_group(struct net_bridge *br,
 	if (atomic_read(&br->mdb_hash_tbl.nelems) >= br->hash_max) {
 		trace_br_mdb_full(br->dev, group);
 		br_mc_disabled_update(br->dev, false, NULL);
-		br_multicast_toggle_enabled(br, false);
+		br_multicast_toggle_enabled(br, false, NULL);
 		return ERR_PTR(-E2BIG);
 	}
 
@@ -1924,7 +1973,7 @@ out:
 	/* another IGMP/MLD querier disappeared, set multicast state to inactive
 	 * if our own querier is disabled, too
 	 */
-	br_multicast_update_active(brmctx);
+	br_multicast_update_active(brmctx, NULL);
 }
 
 static void br_ip4_multicast_querier_expired(struct timer_list *t)
@@ -1973,7 +2022,7 @@ static void br_ip4_multicast_query_delay_expired(struct timer_list *t)
 		/* an own or other IGMP querier appeared some seconds ago and all
 		 * reports should have arrived by now, maybe set multicast state to active
 		 */
-		br_multicast_update_active(brmctx);
+		br_multicast_update_active(brmctx, NULL);
 	spin_unlock(&brmctx->br->multicast_lock);
 }
 
@@ -1988,7 +2037,7 @@ static void br_ip6_multicast_query_delay_expired(struct timer_list *t)
 		/* an own or other MLD querier appeared some seconds ago and all
 		 * reports should have arrived, maybe set multicast state to active
 		 */
-		br_multicast_update_active(brmctx);
+		br_multicast_update_active(brmctx, NULL);
 	spin_unlock(&brmctx->br->multicast_lock);
 }
 #endif
@@ -4493,7 +4542,7 @@ static void __br_multicast_open(struct net_bridge_mcast *brmctx)
 #endif
 
 	/* bridge interface is up, maybe set multicast state to active */
-	br_multicast_update_active(brmctx);
+	br_multicast_update_active(brmctx, NULL);
 }
 
 static void br_multicast_open_locked(struct net_bridge *br)
@@ -4543,7 +4592,7 @@ static void __br_multicast_stop(struct net_bridge_mcast *brmctx)
 #endif
 
 	/* bridge interface is down, set multicast state to inactive */
-	br_multicast_update_active(brmctx);
+	br_multicast_update_active(brmctx, NULL);
 	br_multicast_assert_inactive(brmctx);
 }
 
@@ -4594,7 +4643,7 @@ void br_multicast_toggle_one_vlan(struct net_bridge_vlan *vlan, bool on)
 
 		spin_lock_bh(&br->multicast_lock);
 		vlan->priv_flags ^= BR_VLFLAG_MCAST_ENABLED;
-		br_multicast_update_active(&vlan->br_mcast_ctx);
+		br_multicast_update_active(&vlan->br_mcast_ctx, NULL);
 
 		if (on)
 			__br_multicast_open(&vlan->br_mcast_ctx);
@@ -4953,7 +5002,9 @@ int br_multicast_toggle(struct net_bridge *br, unsigned long val,
 	if (err)
 		goto unlock;
 
-	br_multicast_toggle_enabled(br, !!val);
+	err = br_multicast_toggle_enabled(br, !!val, extack);
+	if (err)
+		goto unlock;
 
 	if (!br_opt_get(br, BROPT_MULTICAST_ENABLED)) {
 		change_snoopers = true;
@@ -5046,7 +5097,7 @@ int br_multicast_set_querier(struct net_bridge_mcast *brmctx, unsigned long val)
 #endif
 
 unlock:
-	br_multicast_update_active(brmctx);
+	br_multicast_update_active(brmctx, NULL);
 	spin_unlock_bh(&brmctx->br->multicast_lock);
 
 	return 0;
