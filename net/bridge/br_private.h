@@ -976,6 +976,7 @@ void br_multicast_disable_port(struct net_bridge_port *port);
 void br_multicast_init(struct net_bridge *br);
 void br_multicast_join_snoopers(struct net_bridge *br);
 void br_multicast_leave_snoopers(struct net_bridge *br);
+void br_multicast_reset_timer_cbs(struct net_bridge_mcast *brmctx);
 void br_multicast_open(struct net_bridge *br);
 void br_multicast_stop(struct net_bridge *br);
 void br_multicast_dev_del(struct net_bridge *br);
@@ -1413,6 +1414,10 @@ static inline void br_multicast_join_snoopers(struct net_bridge *br)
 }
 
 static inline void br_multicast_leave_snoopers(struct net_bridge *br)
+{
+}
+
+static inline void br_multicast_reset_timer_cbs(struct net_bridge_mcast *brmctx)
 {
 }
 
