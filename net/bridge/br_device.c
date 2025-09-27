@@ -168,7 +168,9 @@ static int br_dev_open(struct net_device *dev)
 	netdev_update_features(dev);
 	netif_start_queue(dev);
 	br_stp_enable_bridge(br);
+	spin_lock_bh(&br->multicast_lock);
 	br_multicast_open(br);
+	spin_unlock_bh(&br->multicast_lock);
 
 	if (br_opt_get(br, BROPT_MULTICAST_ENABLED))
 		br_multicast_join_snoopers(br);
@@ -191,7 +193,9 @@ static int br_dev_stop(struct net_device *dev)
 	struct net_bridge *br = netdev_priv(dev);
 
 	br_stp_disable_bridge(br);
+	spin_lock_bh(&br->multicast_lock);
 	br_multicast_stop(br);
+	spin_unlock_bh(&br->multicast_lock);
 
 	if (br_opt_get(br, BROPT_MULTICAST_ENABLED))
 		br_multicast_leave_snoopers(br);
