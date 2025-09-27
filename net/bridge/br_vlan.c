@@ -325,7 +325,12 @@ static int __vlan_add(struct net_bridge_vlan *v, u16 flags,
 			if (err && err != -EOPNOTSUPP)
 				goto out;
 		}
+
 		br_multicast_ctx_init(br, v, &v->br_mcast_ctx);
+
+		spin_lock_bh(&br->multicast_lock);
+		br_multicast_reset_timer_cbs(&v->br_mcast_ctx);
+		spin_unlock_bh(&br->multicast_lock);
 		v->priv_flags |= BR_VLFLAG_GLOBAL_MCAST_ENABLED;
 	}
 
