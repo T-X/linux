@@ -48,7 +48,7 @@ bool br_vlan_opts_eq_range(const struct net_bridge_vlan *v_curr,
 	       curr_mc_rtr == range_mc_rtr;
 }
 
-bool br_vlan_opts_fill(struct sk_buff *skb, struct net_bridge_vlan *v,
+bool br_vlan_opts_fill(struct sk_buff *skb, const struct net_bridge_vlan *v,
 		       const struct net_bridge_port *p)
 {
 	if (nla_put_u8(skb, BRIDGE_VLANDB_ENTRY_STATE, br_vlan_get_state(v)) ||
@@ -347,7 +347,7 @@ bool br_vlan_global_opts_can_enter_range(const struct net_bridge_vlan *v_curr,
 }
 
 bool br_vlan_global_opts_fill(struct sk_buff *skb, u16 vid, u16 vid_range,
-			      struct net_bridge_vlan *v_opts)
+			      const struct net_bridge_vlan *v_opts)
 {
 	struct nlattr *nest2 __maybe_unused;
 	u64 clockval __maybe_unused;
@@ -365,17 +365,6 @@ bool br_vlan_global_opts_fill(struct sk_buff *skb, u16 vid, u16 vid_range,
 		goto out_err;
 
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING
-br_warn(v_opts->br, "~~~ %s:%i: v4: vid: %i, running: %i, mc-on: %i, mcv-on: %i, mcvid-on: %i, q-exists: %i, own-q: %i, oth-q: %i, d-pend: %i\n",
-	__func__, __LINE__, v_opts->vid,
-	netif_running(v_opts->br->dev) ? 1 : 0,
-	br_opt_get(v_opts->br, BROPT_MULTICAST_ENABLED) ? 1 : 0,
-	br_opt_get(v_opts->br, BROPT_MCAST_VLAN_SNOOPING_ENABLED) ? 1 : 0,
-	br_multicast_ctx_vlan_global_disabled(&v_opts->br_mcast_ctx) ? 0 : 1,
-	br_multicast_snooping_active(&v_opts->br_mcast_ctx, htons(ETH_P_IP), NULL) ? 1 : 0,
-	v_opts->br_mcast_ctx.multicast_querier ? 1 : 0,
-	timer_pending(&v_opts->br_mcast_ctx.ip4_other_query.timer) ? 1 : 0,
-	timer_pending(&v_opts->br_mcast_ctx.ip4_other_query.delay_timer) ? 1 : 0);
-
 	if (nla_put_u8(skb, BRIDGE_VLANDB_GOPTS_MCAST_SNOOPING,
 		       !!(v_opts->priv_flags & BR_VLFLAG_GLOBAL_MCAST_ENABLED)) ||
 	    nla_put_u8(skb, BRIDGE_VLANDB_GOPTS_MCAST_IGMP_VERSION,
@@ -435,17 +424,6 @@ br_warn(v_opts->br, "~~~ %s:%i: v4: vid: %i, running: %i, mc-on: %i, mcv-on: %i,
 	}
 
 #if IS_ENABLED(CONFIG_IPV6)
-br_warn(v_opts->br, "~~~ %s:%i: v6: vid: %i, running: %i, mc-on: %i, mcv-on: %i, mcvid-on: %i, q-exists: %i, own-q: %i, oth-q: %i, d-pend: %i\n",
-	__func__, __LINE__, v_opts->vid,
-	netif_running(v_opts->br->dev) ? 1 : 0,
-	br_opt_get(v_opts->br, BROPT_MULTICAST_ENABLED) ? 1 : 0,
-	br_opt_get(v_opts->br, BROPT_MCAST_VLAN_SNOOPING_ENABLED) ? 1 : 0,
-	br_multicast_ctx_vlan_global_disabled(&v_opts->br_mcast_ctx) ? 0 : 1,
-	br_multicast_snooping_active(&v_opts->br_mcast_ctx, htons(ETH_P_IPV6), NULL) ? 1 : 0,
-	v_opts->br_mcast_ctx.multicast_querier ? 1 : 0,
-	timer_pending(&v_opts->br_mcast_ctx.ip6_other_query.timer) ? 1 : 0,
-	timer_pending(&v_opts->br_mcast_ctx.ip6_other_query.delay_timer) ? 1 : 0);
-
 	if (nla_put_u8(skb, BRIDGE_VLANDB_GOPTS_MCAST_MLD_VERSION,
 		       v_opts->br_mcast_ctx.multicast_mld_version) ||
 	    nla_put_u8(skb, BRIDGE_VLANDB_GOPTS_MCAST_ACTIVE_V6,

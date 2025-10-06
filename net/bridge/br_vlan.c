@@ -1854,7 +1854,7 @@ out_err:
 
 /* v_opts is used to dump the options which must be equal in the whole range */
 static bool br_vlan_fill_vids(struct sk_buff *skb, u16 vid, u16 vid_range,
-			      struct net_bridge_vlan *v_opts,
+			      const struct net_bridge_vlan *v_opts,
 			      const struct net_bridge_port *p,
 			      u16 flags,
 			      bool dump_stats)
