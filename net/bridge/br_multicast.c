@@ -36,27 +36,6 @@
 #include "br_private.h"
 #include "br_private_mcast_eht.h"
 
-#if IS_ENABLED(CONFIG_IPV6)
-#define DBG_STORE_ACTIVE(brmctx) \
-	bool ip4_active = (brmctx)->ip4_active; \
-	bool ip6_active = (brmctx)->ip6_active;
-#define DBG_PRINT_ACTIVE(brmctx) \
-	if ((brmctx)->ip4_active != ip4_active || (brmctx)->ip6_active != ip6_active) \
-		br_warn((brmctx)->br, "~~~ (0x%p) %s:%i: after: ip4_active: %i -> %i, ip6_active: %i -> %i\n", (brmctx)->br, __func__, __LINE__, ip4_active ? 1 : 0, (brmctx)->ip4_active ? 1 : 0, ip6_active ? 1 : 0, (brmctx)->ip6_active ? 1 : 0);
-#define DBG_PRINT_ERR_ACTIVE(brmctx) \
-	if ((brmctx)->ip4_active != ip4_active || (brmctx)->ip6_active != ip6_active) \
-		br_warn((brmctx)->br, "~~~ (0x%p) %s:%i: ERROR?: ip4_active: %i -> %i, ip6_active: %i -> %i\n", (brmctx)->br, __func__, __LINE__, ip4_active ? 1 : 0, (brmctx)->ip4_active ? 1 : 0, ip6_active ? 1 : 0, (brmctx)->ip6_active ? 1 : 0);
-#else
-#define DBG_STORE_ACTIVE(brmctx) \
-	bool ip4_active = (brmctx)->ip4_active;
-#define DBG_PRINT_ACTIVE(brmctx) \
-	if ((brmctx)->ip4_active != ip4_active) \
-		br_warn((brmctx)->br, "~~~ (0x%p) %s:%i: after: ip4_active: %i -> %i\n", (brmctx)->br, __func__, __LINE__, ip4_active ? 1 : 0, (brmctx)->ip4_active ? 1 : 0);
-#define DBG_PRINT_ERR_ACTIVE(brmctx) \
-	if ((brmctx)->ip4_active != ip4_active) \
-		br_warn((brmctx)->br, "~~~ (0x%p) %s:%i: ERROR?: ip4_active: %i -> %i\n", (brmctx)->br, __func__, __LINE__, ip4_active ? 1 : 0, (brmctx)->ip4_active ? 1 : 0);
-#endif
-
 static const struct rhashtable_params br_mdb_rht_params = {
 	.head_offset = offsetof(struct net_bridge_mdb_entry, rhnode),
 	.key_offset = offsetof(struct net_bridge_mdb_entry, addr),
@@ -1290,18 +1269,12 @@ static struct sk_buff *br_ip6_multicast_alloc_query(struct net_bridge_mcast *brm
 			       &ip6h->daddr, 0, &ip6h->saddr)) {
 		kfree_skb(skb);
 		br_opt_toggle(brmctx->br, BROPT_HAS_IPV6_ADDR, false);
-
-		DBG_STORE_ACTIVE(brmctx);
 		br_multicast_update_active(brmctx);
-		DBG_PRINT_ACTIVE(brmctx);
 		return NULL;
 	}
 
 	br_opt_toggle(brmctx->br, BROPT_HAS_IPV6_ADDR, true);
-	DBG_STORE_ACTIVE(brmctx);
 	br_multicast_update_active(brmctx);
-	DBG_PRINT_ACTIVE(brmctx);
-
 	ipv6_eth_mc_map(&ip6h->daddr, eth->h_dest);
 
 	hopopt = (u8 *)(ip6h + 1);
@@ -1445,9 +1418,7 @@ static void br_multicast_assert_inactive(struct net_bridge_mcast *brmctx)
 static void br_multicast_toggle_enabled(struct net_bridge *br, bool on)
 {
 	br_opt_toggle(br, BROPT_MULTICAST_ENABLED, on);
-	DBG_STORE_ACTIVE(&br->multicast_ctx);
 	br_multicast_update_active(&br->multicast_ctx);
-	DBG_PRINT_ACTIVE(&br->multicast_ctx);
 
 	if (!on)
 		br_multicast_assert_inactive(&br->multicast_ctx);
@@ -1927,12 +1898,10 @@ static void br_multicast_querier_expired(struct net_bridge_mcast *brmctx,
 	br_multicast_start_querier(brmctx, query);
 
 out:
-	DBG_STORE_ACTIVE(brmctx);
 	/* another IGMP/MLD querier disappeared, set multicast state to inactive
 	 * if our own querier is disabled, too
 	 */
 	br_multicast_update_active(brmctx);
-	DBG_PRINT_ACTIVE(brmctx);
 }
 
 static void br_ip4_multicast_querier_expired(struct timer_list *t)
@@ -1977,14 +1946,11 @@ static void br_ip4_multicast_query_delay_expired(struct timer_list *t)
 							     ip4_other_query.delay_timer);
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!br_multicast_stopping(brmctx->br, t)) {
+	if (!br_multicast_stopping(brmctx->br, t))
 		/* an own or other IGMP querier appeared some seconds ago and all
 		 * reports should have arrived by now, maybe set multicast state to active
 		 */
-		DBG_STORE_ACTIVE(brmctx);
 		br_multicast_update_active(brmctx);
-		DBG_PRINT_ACTIVE(brmctx);
-	}
 	spin_unlock(&brmctx->br->multicast_lock);
 }
 
@@ -1995,14 +1961,11 @@ static void br_ip6_multicast_query_delay_expired(struct timer_list *t)
 							     ip6_other_query.delay_timer);
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!br_multicast_stopping(brmctx->br, t)) {
+	if (!br_multicast_stopping(brmctx->br, t))
 		/* an own or other MLD querier appeared some seconds ago and all
 		 * reports should have arrived, maybe set multicast state to active
 		 */
-		DBG_STORE_ACTIVE(brmctx);
 		br_multicast_update_active(brmctx);
-		DBG_PRINT_ACTIVE(brmctx);
-	}
 	spin_unlock(&brmctx->br->multicast_lock);
 }
 #endif
@@ -2133,8 +2096,6 @@ static void br_multicast_send_query(struct net_bridge_mcast *brmctx,
 	time += own_query->startup_sent < brmctx->multicast_startup_query_count ?
 		brmctx->multicast_startup_query_interval :
 		brmctx->multicast_query_interval;
-
-	br_warn(brmctx->br, "~~~ (0x%p) %s:%i: arming br_ip6_multicast_query_expired(), +%is\n", brmctx->br, __func__, __LINE__, jiffies_to_msecs(time - jiffies) / 1000);
 	mod_timer(&own_query->timer, time);
 }
 
@@ -3712,7 +3673,6 @@ br_ip4_multicast_query_received(struct net_bridge_mcast *brmctx,
 	if (!br_multicast_select_querier(brmctx, pmctx, saddr))
 		return;
 
-	br_warn(brmctx->br, "~~~ (0x%p) %s:%i: arming br_ip4_multicast_querier_expired(), +255s\n", brmctx->br, __func__, __LINE__);
 	br_multicast_update_query_timer(brmctx, query, max_delay);
 	br_ip4_multicast_mark_router(brmctx, pmctx);
 }
@@ -3728,7 +3688,6 @@ br_ip6_multicast_query_received(struct net_bridge_mcast *brmctx,
 	if (!br_multicast_select_querier(brmctx, pmctx, saddr))
 		return;
 
-	br_warn(brmctx->br, "~~~ (0x%p) %s:%i: arming br_ip6_multicast_querier_expired(), +255s\n", brmctx->br, __func__, __LINE__);
 	br_multicast_update_query_timer(brmctx, query, max_delay);
 	br_ip6_multicast_mark_router(brmctx, pmctx);
 }
@@ -4307,9 +4266,6 @@ static void br_multicast_query_expired(struct net_bridge_mcast *brmctx,
 
 	br_multicast_send_query(brmctx, NULL, query);
 out:
-//	DBG_STORE_ACTIVE(brmctx);
-//	br_multicast_update_active(brmctx);
-//	DBG_PRINT_ERR_ACTIVE(brmctx);
 	spin_unlock(&brmctx->br->multicast_lock);
 }
 
@@ -4501,7 +4457,6 @@ static void __br_multicast_open_query(struct net_bridge *br,
 	if (!br_opt_get(br, BROPT_MULTICAST_ENABLED))
 		return;
 
-	br_warn(br, "~~~ (0x%p) %s:%i: arming br_ip6_multicast_query_expired(), +0s\n", br, __func__, __LINE__);
 	mod_timer(&query->timer, jiffies);
 }
 
@@ -4514,10 +4469,8 @@ static void __br_multicast_open(struct net_bridge_mcast *brmctx)
 	__br_multicast_open_query(brmctx->br, &brmctx->ip6_own_query);
 #endif
 
-	DBG_STORE_ACTIVE(brmctx);
 	/* bridge interface is up, maybe set multicast state to active */
 	br_multicast_update_active(brmctx);
-	DBG_PRINT_ACTIVE(brmctx);
 }
 
 void br_multicast_open(struct net_bridge *br)
@@ -4559,11 +4512,9 @@ static void __br_multicast_stop(struct net_bridge_mcast *brmctx)
 	timer_shutdown(&brmctx->ip6_own_query.timer);
 #endif
 
-	DBG_STORE_ACTIVE(brmctx);
 	/* bridge interface is down, set multicast state to inactive */
 	br_multicast_update_active(brmctx);
 	br_multicast_assert_inactive(brmctx);
-	DBG_PRINT_ACTIVE(brmctx);
 }
 
 void br_multicast_update_vlan_mcast_ctx(struct net_bridge_vlan *v, u8 state)
@@ -5049,9 +5000,7 @@ int br_multicast_set_querier(struct net_bridge_mcast *brmctx, unsigned long val)
 #endif
 
 unlock:
-	DBG_STORE_ACTIVE(brmctx);
 	br_multicast_update_active(brmctx);
-	DBG_PRINT_ACTIVE(brmctx);
 	spin_unlock_bh(&brmctx->br->multicast_lock);
 
 	return 0;
