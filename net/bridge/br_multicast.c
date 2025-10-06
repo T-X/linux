@@ -1135,6 +1135,18 @@ static void br_ip6_multicast_update_active(struct net_bridge_mcast *brmctx,
 #endif
 }
 
+static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
+				       bool ip4_active_old, bool ip6_active_old)
+{
+	if (brmctx->ip4_active == ip4_active_old &&
+	    brmctx->ip6_active == ip6_active_old)
+		return;
+
+	br_info(brmctx->br, "mc_active changed: v4: %i->%i, v6: %i->%i\n",
+		ip4_active_old, brmctx->ip4_active,
+		ip6_active_old, brmctx->ip6_active);
+}
+
 /**
  * br_multicast_update_active() - update mcast active state
  * @brmctx: the bridge multicast context to check
@@ -1157,6 +1169,7 @@ static void br_ip6_multicast_update_active(struct net_bridge_mcast *brmctx,
  */
 static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
 {
+	bool ip4_active_old = brmctx->ip4_active, ip6_active_old = brmctx->ip6_active;
 	bool force_inactive = false;
 
 	lockdep_assert_held_once(&brmctx->br->multicast_lock);
@@ -1189,6 +1202,8 @@ static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
 
 	br_ip4_multicast_update_active(brmctx, force_inactive);
 	br_ip6_multicast_update_active(brmctx, force_inactive);
+
+	br_multicast_notify_active(brmctx, ip4_active_old, ip6_active_old);
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
