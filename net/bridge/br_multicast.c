@@ -1125,7 +1125,7 @@ static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
  * The multicast active state is set, per protocol family, if:
  *
  * - an IGMP/MLD querier is present
- * - for own IPv6 MLD querier: an IPv6 address is configured on the bridge
+ * - for own IPv6 MLD querier: an IPv6 link-local address is configured on the bridge
  *
  * And is unset otherwise.
  *
