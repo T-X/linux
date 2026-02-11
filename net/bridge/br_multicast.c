@@ -1101,13 +1101,13 @@ static bool br_ip6_multicast_querier_exists(struct net_bridge_mcast *brmctx)
 }
 #endif
 
-static bool br_multicast_querier_exists(struct net_bridge_mcast *brmctx, int proto)
+static bool br_multicast_querier_exists(struct net_bridge_mcast *brmctx, u16 proto)
 {
 	switch (proto) {
-	case (ETH_P_IP):
+	case ETH_P_IP:
 		return br_ip4_multicast_querier_exists(brmctx);
 #if IS_ENABLED(CONFIG_IPV6)
-	case (ETH_P_IPV6):
+	case ETH_P_IPV6:
 		return br_ip6_multicast_querier_exists(brmctx);
 #endif
 	default:
