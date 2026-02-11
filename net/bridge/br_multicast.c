@@ -1853,7 +1853,7 @@ static void br_ip4_multicast_query_delay_expired(struct timer_list *t)
 							     ip4_other_query.delay_timer);
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!br_multicast_stopping(brmctx->br, t))
+	if (!br_multicast_is_stopping(brmctx->br, t))
 		/* an own or other IGMP querier appeared some seconds ago and all
 		 * reports should have arrived by now, maybe set multicast state to active
 		 */
@@ -1868,7 +1868,7 @@ static void br_ip6_multicast_query_delay_expired(struct timer_list *t)
 							     ip6_other_query.delay_timer);
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!br_multicast_stopping(brmctx->br, t))
+	if (!br_multicast_is_stopping(brmctx->br, t))
 		/* an own or other MLD querier appeared some seconds ago and all
 		 * reports should have arrived, maybe set multicast state to active
 		 */
