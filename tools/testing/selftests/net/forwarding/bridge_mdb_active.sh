@@ -45,6 +45,10 @@ ALL_TESTS="
 	test_vlan_inactive_other_querier_norespdelay
 	test_vlan_inactive_own_querier_norespdelay
 "
+#	test_vlan_active_own_querier
+ALL_TESTS="
+	test_vlan_inactive_brdown
+"
 
 NUM_NETIFS=2
 MCAST_MAX_RESP_IVAL_SEC=1
@@ -101,18 +105,26 @@ mcast_active_check()
 {
 	local af="$1"
 	local state="$2"
+	local lineno="$3"
+	local ret
 
 	ip -d -j link show dev br0\
 		| jq -e ".[] | select(.linkinfo.info_data.mcast_active_$af == $state)"\
 		&> /dev/null
+	ret="$?"
 
-	check_err $? "Mcast active check failed ($af)"
+	if [ "$state" -eq 0 ]; then
+		check_err "$ret" "$lineno: Mcast inactive check failed ($af)"
+	elif [ "$state" -eq 1 ]; then
+		check_err "$ret" "$lineno: Mcast active check failed ($af)"
+	fi
 }
 
 mcast_vlan_active_check()
 {
 	local af="$1"
 	local state="$2"
+	local lineno="$3"
 	local vid="${MCAST_VLAN_ID}"
 	local ret
 
@@ -121,49 +133,55 @@ mcast_vlan_active_check()
 		&> /dev/null
 	ret="$?"
 
-	if { [ "$ret" -eq 0 ] && [ "$state" -eq 0 ]; } || { [ "$ret" -ne 0 ] && [ "$state" -eq 1 ]; }; then
-		check_err 1 "Mcast VLAN active check failed ($af)"
+	if [ "$state" -eq 0 ]; then
+		if [ "$ret" -eq 0 ]; then
+			check_err 1 "$lineno: Mcast VLAN inactive check failed ($af)"
+		fi
+	elif [ "$state" -eq 1 ]; then
+		if [ "$ret" -ne 0 ]; then
+			check_err 1 "$lineno: Mcast VLAN active check failed ($af)"
+		fi
 	fi
 }
 
 mcast_assert_active_v4()
 {
-	mcast_active_check "v4" "1"
+	mcast_active_check "v4" "1" "$1"
 }
 
 mcast_assert_active_v6()
 {
-	mcast_active_check "v6" "1"
+	mcast_active_check "v6" "1" "$1"
 }
 
 mcast_assert_inactive_v4()
 {
-	mcast_active_check "v4" "0"
+	mcast_active_check "v4" "0" "$1"
 }
 
 mcast_assert_inactive_v6()
 {
-	mcast_active_check "v6" "0"
+	mcast_active_check "v6" "0" "$1"
 }
 
 mcast_vlan_assert_active_v4()
 {
-	mcast_vlan_active_check "v4" "1"
+	mcast_vlan_active_check "v4" "1" "$1"
 }
 
 mcast_vlan_assert_active_v6()
 {
-	mcast_vlan_active_check "v6" "1"
+	mcast_vlan_active_check "v6" "1" "$1"
 }
 
 mcast_vlan_assert_inactive_v4()
 {
-	mcast_vlan_active_check "v4" "0"
+	mcast_vlan_active_check "v4" "0" "$1"
 }
 
 mcast_vlan_assert_inactive_v6()
 {
-	mcast_vlan_active_check "v6" "0"
+	mcast_vlan_active_check "v6" "0" "$1"
 }
 
 test_inactive_nolog()
@@ -180,15 +198,15 @@ test_inactive_nolog()
 	echo 1 > /proc/sys/net/ipv6/conf/br0/disable_ipv6
 	echo 1 > /proc/sys/net/ipv6/conf/brq0/disable_ipv6
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$1"
+	mcast_assert_inactive_v6 "$1"
 }
 
 test_inactive()
 {
 	RET=0
 
-	test_inactive_nolog
+	test_inactive_nolog "$1"
 	log_test "Mcast inactive test"
 }
 
@@ -267,10 +285,10 @@ test_vlan_teardown()
 {
 	bridge vlan del vid "${MCAST_VLAN_ID}" dev "$swp1"
 	bridge vlan del vid "${MCAST_VLAN_ID}" dev "$h1"
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$1"
+	mcast_assert_inactive_v6 "$1"
+	mcast_vlan_assert_inactive_v4 "$1"
+	mcast_vlan_assert_inactive_v6 "$1"
 }
 
 test_vlan_active_setup_reset_own_querier()
@@ -287,16 +305,16 @@ test_active_other_querier_nolog()
 	test_active_setup_config "1" "2" ""  "4"
 	test_active_setup_wait
 
-	mcast_assert_active_v4
-	mcast_assert_active_v6
+	mcast_assert_active_v4 "$1"
+	mcast_assert_active_v6 "$1"
 }
 
 test_active_other_querier()
 {
 	RET=0
 
-	test_active_other_querier_nolog
-	test_inactive_nolog
+	test_active_other_querier_nolog "$LINENO"
+	test_inactive_nolog "$LINENO"
 	log_test "Mcast active with other querier test"
 }
 
@@ -306,25 +324,25 @@ test_active_own_querier_nolog()
 	test_active_setup_config "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_active_v4
-	mcast_assert_active_v6
+	mcast_assert_active_v4 "$1"
+	mcast_assert_active_v6 "$1"
 }
 
 test_active_own_querier()
 {
 	RET=0
 
-	test_active_own_querier_nolog
-	test_inactive_nolog
+	test_active_own_querier_nolog "$LINENO"
+	test_inactive_nolog "$LINENO"
 	log_test "Mcast active with own querier test"
 }
 
 test_active_final()
 {
-	mcast_assert_active_v4
-	mcast_assert_active_v6
+	mcast_assert_active_v4 "$1"
+	mcast_assert_active_v6 "$1"
 
-	test_inactive_nolog
+	test_inactive_nolog "$1"
 }
 
 test_inactive_brdown()
@@ -335,16 +353,16 @@ test_inactive_brdown()
 	test_active_setup_config "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_bridge ""  ""  "3" ""  ""  ""
-	mcast_assert_active_v4
-	mcast_assert_inactive_v6
+	mcast_assert_active_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_bridge ""  ""  ""  ""  "5" ""
 	test_active_setup_reset_own_querier
-	test_active_final
+	test_active_final "$LINENO"
 
 	log_test "Mcast inactive, bridge down test"
 }
@@ -357,12 +375,12 @@ test_inactive_nov6()
 	test_active_setup_config "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_active_v4
-	mcast_assert_inactive_v6
+	mcast_assert_active_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_bridge "1" ""  ""  ""  "5" ""
 	test_active_setup_reset_own_querier
-	test_active_final
+	test_active_final "$LINENO"
 
 	log_test "Mcast inactive, own querier, no IPv6 address test"
 }
@@ -375,12 +393,12 @@ test_inactive_snooping_off()
 	test_active_setup_config ""  "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_config "1" ""  ""  ""
 	test_active_setup_reset_own_querier
-	test_active_final
+	test_active_final "$LINENO"
 
 	log_test "Mcast inactive, snooping disabled test"
 }
@@ -393,12 +411,12 @@ test_inactive_querier_off()
 	test_active_setup_config "1" "2" ""  ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_config ""  ""  "3" ""
 	test_active_setup_wait
-	test_active_final
+	test_active_final "$LINENO"
 
 	log_test "Mcast inactive, no querier test"
 }
@@ -411,11 +429,11 @@ test_inactive_other_querier_norespdelay()
 	test_active_setup_config "1" "2" "3" ""
 	# skipping: test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_wait
-	test_active_final
+	test_active_final "$LINENO"
 
 	log_test "Mcast inactive, other querier, no response delay test"
 }
@@ -428,11 +446,11 @@ test_inactive_own_querier_norespdelay()
 	test_active_setup_config "1" "2" ""  "4"
 	# skipping: test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_wait
-	test_active_final
+	test_active_final "$LINENO"
 
 	log_test "Mcast inactive, own querier, no response delay test"
 }
@@ -441,41 +459,41 @@ test_vlan_inactive()
 {
 	RET=0
 
-	test_inactive_nolog
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	test_inactive_nolog "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	ip link set dev br0 type bridge vlan_filtering 1
 	ip link set dev br0 type bridge mcast_vlan_snooping 1
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
 	ip link set dev br0 type bridge mcast_vlan_snooping 0
 	ip link set dev br0 type bridge vlan_filtering 0
-	test_active_own_querier_nolog
+	test_active_own_querier_nolog "$LINENO"
 	ip link set dev br0 type bridge vlan_filtering 1
-	mcast_assert_active_v4
-	mcast_assert_active_v6
+	mcast_assert_active_v4 "$LINENO"
+	mcast_assert_active_v6 "$LINENO"
 
 	ip link set dev br0 type bridge mcast_vlan_snooping 1
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
 
-	test_inactive_nolog
+	test_inactive_nolog "$LINENO"
 	log_test "Mcast VLAN inactive test"
 }
 
 test_vlan_active_final()
 {
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_active_v4
-	mcast_vlan_assert_active_v6
+	mcast_assert_inactive_v4 "$1"
+	mcast_assert_inactive_v6 "$1"
+	mcast_vlan_assert_active_v4 "$1"
+	mcast_vlan_assert_active_v6 "$1"
 
-	test_vlan_teardown
-	test_inactive_nolog
+	test_vlan_teardown "$1"
+	test_inactive_nolog "$1"
 }
 
 test_vlan_active_other_querier()
@@ -488,7 +506,7 @@ test_vlan_active_other_querier()
 	test_vlan_active_setup_add_vlan
 	test_vlan_active_setup_config_vlan "1" "2" ""  "4"
 	test_active_setup_wait
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN active, other querier test"
 }
@@ -503,7 +521,7 @@ test_vlan_active_own_querier()
 	test_vlan_active_setup_add_vlan
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
 	test_active_setup_wait
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN active, own querier test"
 }
@@ -519,19 +537,27 @@ test_vlan_inactive_brdown()
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	log_info "~~~ here: $LINENO, RET: $RET"
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
+	log_info "~~~ here: $LINENO, RET: $RET"
 
 	test_active_setup_bridge ""  ""  "3" ""  ""  ""
-	mcast_vlan_assert_active_v4
-	mcast_assert_inactive_v6
+	log_info "~~~ here: $LINENO, RET: $RET"
+	test_active_setup_wait
+	log_info "~~~ here: $LINENO, RET: $RET"
+	mcast_vlan_assert_active_v4 "$LINENO"
+	log_info "~~~ here: $LINENO, RET: $RET"
+	mcast_assert_inactive_v6 "$LINENO"
 
+	log_info "~~~ here: $LINENO, RET: $RET"
 	test_active_setup_bridge ""  ""  ""  ""  "5" ""
 	test_vlan_active_setup_reset_own_querier
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO, RET: $RET"
 
+	log_info "~~~ here: $LINENO, RET: $RET"
 	log_test "Mcast VLAN inactive, bridge down test"
 }
 
@@ -546,14 +572,14 @@ test_vlan_inactive_nov6()
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_active_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_active_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_bridge "1" ""  ""  ""  "5" ""
 	test_vlan_active_setup_reset_own_querier
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN inactive, own querier, no IPv6 address test"
 }
@@ -569,14 +595,14 @@ test_vlan_inactive_snooping_off()
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_config "1" ""  ""  ""
 	test_vlan_active_setup_reset_own_querier
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN inactive, snooping disabled test"
 }
@@ -592,14 +618,14 @@ test_vlan_inactive_vlans_snooping_off()
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	test_vlan_active_setup_config ""  ""  "3" ""
 	test_vlan_active_setup_reset_own_querier
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN inactive, snooping for VLANs disabled test"
 }
@@ -615,14 +641,14 @@ test_vlan_inactive_vlan_snooping_off()
 	test_vlan_active_setup_config_vlan ""  "2" "3" ""
 	test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	test_vlan_active_setup_config_vlan "1" ""  ""  ""
 	test_vlan_active_setup_reset_own_querier
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN inactive, snooping for this VLAN disabled test"
 }
@@ -638,13 +664,13 @@ test_vlan_inactive_other_querier_norespdelay()
 	test_vlan_active_setup_config_vlan "1" "2" ""  "4"
 	# skipping: test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_wait
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN inactive, other querier, no response delay test"
 }
@@ -660,13 +686,13 @@ test_vlan_inactive_own_querier_norespdelay()
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
 	# skipping: test_active_setup_wait
 
-	mcast_assert_inactive_v4
-	mcast_assert_inactive_v6
-	mcast_vlan_assert_inactive_v4
-	mcast_vlan_assert_inactive_v6
+	mcast_assert_inactive_v4 "$LINENO"
+	mcast_assert_inactive_v6 "$LINENO"
+	mcast_vlan_assert_inactive_v4 "$LINENO"
+	mcast_vlan_assert_inactive_v6 "$LINENO"
 
 	test_active_setup_wait
-	test_vlan_active_final
+	test_vlan_active_final "$LINENO"
 
 	log_test "Mcast VLAN inactive, own querier, no response delay test"
 }
