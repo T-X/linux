@@ -46,7 +46,7 @@ ALL_TESTS="
 	test_vlan_inactive_own_querier_norespdelay
 "
 
-NUM_NETIFS=1
+NUM_NETIFS=2
 MCAST_MAX_RESP_IVAL_SEC=1
 MCAST_VLAN_ID=42
 source lib.sh
@@ -55,29 +55,29 @@ switch_create()
 {
 	ip link add dev br0 type bridge\
 		vlan_filtering 0 \
-		mcast_query_response_interval $((${MCAST_MAX_RESP_IVAL_SEC}*100))\
+		mcast_query_response_interval $((MCAST_MAX_RESP_IVAL_SEC*100))\
 		mcast_snooping 0 \
 		mcast_vlan_snooping 0
 	ip link add dev brq0 type bridge\
 		vlan_filtering 0 \
-		mcast_query_response_interval $((${MCAST_MAX_RESP_IVAL_SEC}*100))\
+		mcast_query_response_interval $((MCAST_MAX_RESP_IVAL_SEC*100))\
 		mcast_snooping 0 \
 		mcast_vlan_snooping 0
 
 	echo 1 > /proc/sys/net/ipv6/conf/br0/disable_ipv6
 	echo 1 > /proc/sys/net/ipv6/conf/brq0/disable_ipv6
 
-	ip link set dev $swp1 master br0
-	ip link set dev $h1 master brq0
+	ip link set dev "$swp1" master br0
+	ip link set dev "$h1" master brq0
 
-	ip link set dev $h1 up
-	ip link set dev $swp1 up
+	ip link set dev "$h1" up
+	ip link set dev "$swp1" up
 }
 
 switch_destroy()
 {
-	ip link set dev $swp1 down
-	ip link set dev $h1 down
+	ip link set dev "$swp1" down
+	ip link set dev "$h1" down
 
 	ip link del dev brq0
 	ip link del dev br0
@@ -106,7 +106,7 @@ mcast_active_check()
 		| jq -e ".[] | select(.linkinfo.info_data.mcast_active_$af == $state)"\
 		&> /dev/null
 
-	check_err $? "Mcast active check failed"
+	check_err $? "Mcast active check failed ($af)"
 }
 
 mcast_vlan_active_check()
@@ -121,8 +121,8 @@ mcast_vlan_active_check()
 		&> /dev/null
 	ret="$?"
 
-	if [ $ret -eq 0 -a $state -eq 0 ] || [ $ret -ne 0 -a $state -eq 1 ]; then
-		check_err 1 "Mcast VLAN active check failed"
+	if { [ "$ret" -eq 0 ] && [ "$state" -eq 0 ]; } || { [ "$ret" -ne 0 ] && [ "$state" -eq 1 ]; }; then
+		check_err 1 "Mcast VLAN active check failed ($af)"
 	fi
 }
 
@@ -165,7 +165,6 @@ mcast_vlan_assert_inactive_v6()
 {
 	mcast_vlan_active_check "v6" "0"
 }
-
 
 test_inactive_nolog()
 {
@@ -223,7 +222,7 @@ test_active_setup_config()
 
 test_active_setup_wait()
 {
-	sleep $((${MCAST_MAX_RESP_IVAL_SEC} * 2))
+	sleep $((MCAST_MAX_RESP_IVAL_SEC * 2))
 }
 
 test_active_setup_reset_own_querier()
@@ -244,30 +243,30 @@ test_vlan_active_setup_config()
 
 test_vlan_active_setup_add_vlan()
 {
-	bridge vlan add vid ${MCAST_VLAN_ID} dev $swp1
-	bridge vlan add vid ${MCAST_VLAN_ID} dev $h1
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev br0\
-		mcast_query_response_interval $((${MCAST_MAX_RESP_IVAL_SEC}*100))
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev brq0\
-		mcast_query_response_interval $((${MCAST_MAX_RESP_IVAL_SEC}*100))
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev br0 mcast_snooping 0
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev brq0 mcast_snooping 0
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev br0 mcast_querier 0
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev brq0 mcast_querier 0
+	bridge vlan add vid "${MCAST_VLAN_ID}" dev "$swp1"
+	bridge vlan add vid "${MCAST_VLAN_ID}" dev "$h1"
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0\
+		mcast_query_response_interval $((MCAST_MAX_RESP_IVAL_SEC*100))
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev brq0\
+		mcast_query_response_interval $((MCAST_MAX_RESP_IVAL_SEC*100))
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0 mcast_snooping 0
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev brq0 mcast_snooping 0
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0 mcast_querier 0
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev brq0 mcast_querier 0
 }
 
 test_vlan_active_setup_config_vlan()
 {
-	[ -n "$1" ] && bridge vlan global set vid ${MCAST_VLAN_ID} dev br0 mcast_snooping 1
-	[ -n "$2" ] && bridge vlan global set vid ${MCAST_VLAN_ID} dev brq0 mcast_snooping 1
-	[ -n "$3" ] && bridge vlan global set vid ${MCAST_VLAN_ID} dev br0 mcast_querier 1
-	[ -n "$4" ] && bridge vlan global set vid ${MCAST_VLAN_ID} dev brq0 mcast_querier 1
+	[ -n "$1" ] && bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0 mcast_snooping 1
+	[ -n "$2" ] && bridge vlan global set vid "${MCAST_VLAN_ID}" dev brq0 mcast_snooping 1
+	[ -n "$3" ] && bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0 mcast_querier 1
+	[ -n "$4" ] && bridge vlan global set vid "${MCAST_VLAN_ID}" dev brq0 mcast_querier 1
 }
 
 test_vlan_teardown()
 {
-	bridge vlan del vid ${MCAST_VLAN_ID} dev $swp1
-	bridge vlan del vid ${MCAST_VLAN_ID} dev $h1
+	bridge vlan del vid "${MCAST_VLAN_ID}" dev "$swp1"
+	bridge vlan del vid "${MCAST_VLAN_ID}" dev "$h1"
 	mcast_assert_inactive_v4
 	mcast_assert_inactive_v6
 	mcast_vlan_assert_inactive_v4
@@ -276,8 +275,8 @@ test_vlan_teardown()
 
 test_vlan_active_setup_reset_own_querier()
 {
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev br0 mcast_querier 0
-	bridge vlan global set vid ${MCAST_VLAN_ID} dev br0 mcast_querier 1
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0 mcast_querier 0
+	bridge vlan global set vid "${MCAST_VLAN_ID}" dev br0 mcast_querier 1
 
 	test_active_setup_wait
 }
@@ -410,7 +409,7 @@ test_inactive_other_querier_norespdelay()
 
 	test_active_setup_bridge "1" "2" "3" "4" "5" "6"
 	test_active_setup_config "1" "2" "3" ""
-	#test_active_setup_wait
+	# skipping: test_active_setup_wait
 
 	mcast_assert_inactive_v4
 	mcast_assert_inactive_v6
@@ -427,7 +426,7 @@ test_inactive_own_querier_norespdelay()
 
 	test_active_setup_bridge "1" "2" "3" "4" "5" "6"
 	test_active_setup_config "1" "2" ""  "4"
-	#test_active_setup_wait
+	# skipping: test_active_setup_wait
 
 	mcast_assert_inactive_v4
 	mcast_assert_inactive_v6
@@ -637,7 +636,7 @@ test_vlan_inactive_other_querier_norespdelay()
 	test_vlan_active_setup_config "1" "2" "3" "4"
 	test_vlan_active_setup_add_vlan
 	test_vlan_active_setup_config_vlan "1" "2" ""  "4"
-	#test_active_setup_wait
+	# skipping: test_active_setup_wait
 
 	mcast_assert_inactive_v4
 	mcast_assert_inactive_v6
@@ -659,7 +658,7 @@ test_vlan_inactive_own_querier_norespdelay()
 	test_vlan_active_setup_config "1" "2" "3" "4"
 	test_vlan_active_setup_add_vlan
 	test_vlan_active_setup_config_vlan "1" "2" "3" ""
-	#test_active_setup_wait
+	# skipping: test_active_setup_wait
 
 	mcast_assert_inactive_v4
 	mcast_assert_inactive_v6
@@ -675,8 +674,13 @@ test_vlan_inactive_own_querier_norespdelay()
 trap cleanup EXIT
 
 setup_prepare
-setup_wait
 
+if ! ip -d link show dev br0 2>&1 | grep -q "mcast_active"; then
+	echo "SKIP: iproute2 too old, missing mcast_active support"
+	exit "$ksft_skip"
+fi
+
+setup_wait
 tests_run
 
-exit $EXIT_STATUS
+exit "$EXIT_STATUS"
