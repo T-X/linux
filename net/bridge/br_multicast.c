@@ -1104,8 +1104,8 @@ static void br_ip6_multicast_update_active(struct net_bridge_mcast *brmctx,
 static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
 				       bool ip4_active_old, bool ip6_active_old)
 {
-	int ip4_active = READ_ONCE(brmctx->ip4_active);
-	int ip6_active = READ_ONCE(brmctx->ip6_active);
+	int ip4_active = brmctx->ip4_active;
+	int ip6_active = brmctx->ip6_active;
 
 	if (ip4_active == ip4_active_old &&
 	    ip6_active == ip6_active_old)
@@ -1138,8 +1138,8 @@ static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
  */
 static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
 {
-	bool ip4_active_old = READ_ONCE(brmctx->ip4_active);
-	bool ip6_active_old = READ_ONCE(brmctx->ip6_active);
+	bool ip4_active_old = brmctx->ip4_active;
+	bool ip6_active_old = brmctx->ip6_active;
 	bool force_inactive = false;
 
 	lockdep_assert_held_once(&brmctx->br->multicast_lock);
