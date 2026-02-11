@@ -4488,7 +4488,6 @@ void br_multicast_toggle_one_vlan(struct net_bridge_vlan *vlan, bool on)
 
 		spin_lock_bh(&br->multicast_lock);
 		vlan->priv_flags ^= BR_VLFLAG_MCAST_ENABLED;
-		br_multicast_update_active(&vlan->br_mcast_ctx);
 
 		if (on)
 			__br_multicast_open(&vlan->br_mcast_ctx);
