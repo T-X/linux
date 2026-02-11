@@ -1108,10 +1108,10 @@ static void br_multicast_notify_active(struct net_bridge_mcast *brmctx,
 	    brmctx->ip6_active == ip6_active_old)
 		return;
 
-	br_info(brmctx->br, "mc_active changed, vid: %i: v4: %i->%i, v6: %i->%i\n",
-		brmctx->vlan ? brmctx->vlan->vid : -1,
-		ip4_active_old, brmctx->ip4_active,
-		ip6_active_old, brmctx->ip6_active);
+	br_debug(brmctx->br, "mc_active changed, vid: %i: v4: %i->%i, v6: %i->%i\n",
+		 brmctx->vlan ? brmctx->vlan->vid : -1,
+		 ip4_active_old, brmctx->ip4_active,
+		 ip6_active_old, brmctx->ip6_active);
 }
 
 /**
