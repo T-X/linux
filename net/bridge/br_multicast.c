@@ -1665,8 +1665,8 @@ out:
 	spin_unlock(&br->multicast_lock);
 }
 
-static bool br_multicast_stopping(struct net_bridge *br,
-				  struct timer_list *timer)
+static bool br_multicast_is_stopping(struct net_bridge *br,
+				     struct timer_list *timer)
 {
 	lockdep_assert_held_once(&br->multicast_lock);
 
@@ -1708,7 +1708,7 @@ static void br_multicast_local_router_expired(struct net_bridge_mcast *brmctx,
 					      struct timer_list *timer)
 {
 	spin_lock(&brmctx->br->multicast_lock);
-	if (br_multicast_stopping(brmctx->br, timer) ||
+	if (br_multicast_is_stopping(brmctx->br, timer) ||
 	    brmctx->multicast_router == MDB_RTR_TYPE_DISABLED ||
 	    brmctx->multicast_router == MDB_RTR_TYPE_PERM ||
 	    br_ip4_multicast_is_router(brmctx) ||
@@ -1743,7 +1743,7 @@ static void br_multicast_querier_expired(struct net_bridge_mcast *brmctx,
 					 struct timer_list *timer)
 {
 	spin_lock(&brmctx->br->multicast_lock);
-	if (br_multicast_stopping(brmctx->br, timer) ||
+	if (br_multicast_is_stopping(brmctx->br, timer) ||
 	    br_multicast_ctx_vlan_global_disabled(brmctx) ||
 	    !br_opt_get(brmctx->br, BROPT_MULTICAST_ENABLED))
 		goto out;
@@ -4063,7 +4063,7 @@ static void br_multicast_query_expired(struct net_bridge_mcast *brmctx,
 				       struct timer_list *timer)
 {
 	spin_lock(&brmctx->br->multicast_lock);
-	if (br_multicast_stopping(brmctx->br, timer) ||
+	if (br_multicast_is_stopping(brmctx->br, timer) ||
 	    br_multicast_ctx_vlan_disabled(brmctx))
 		goto out;
 
@@ -4274,7 +4274,7 @@ static void __br_multicast_open(struct net_bridge_mcast *brmctx)
 #endif
 }
 
-void br_multicast_open(struct net_bridge *br)
+static void br_multicast_open_locked(struct net_bridge *br)
 {
 	ASSERT_RTNL();
 
@@ -4296,6 +4296,13 @@ void br_multicast_open(struct net_bridge *br)
 	} else {
 		__br_multicast_open(&br->multicast_ctx);
 	}
+}
+
+void br_multicast_open(struct net_bridge *br)
+{
+	spin_lock_bh(&br->multicast_lock);
+	br_multicast_open_locked(br);
+	spin_unlock_bh(&br->multicast_lock);
 }
 
 static void __br_multicast_stop(struct net_bridge_mcast *brmctx)
@@ -4463,7 +4470,7 @@ bool br_multicast_toggle_global_vlan(struct net_bridge_vlan *vlan, bool on)
 	return true;
 }
 
-void br_multicast_stop(struct net_bridge *br)
+static void br_multicast_stop_locked(struct net_bridge *br)
 {
 	ASSERT_RTNL();
 
@@ -4485,6 +4492,13 @@ void br_multicast_stop(struct net_bridge *br)
 	} else {
 		__br_multicast_stop(&br->multicast_ctx);
 	}
+}
+
+void br_multicast_stop(struct net_bridge *br)
+{
+	spin_lock_bh(&br->multicast_lock);
+	br_multicast_stop_locked(br);
+	spin_unlock_bh(&br->multicast_lock);
 }
 
 void br_multicast_dev_del(struct net_bridge *br)
@@ -4722,7 +4736,7 @@ int br_multicast_toggle(struct net_bridge *br, unsigned long val,
 	if (!netif_running(br->dev))
 		goto unlock;
 
-	br_multicast_open(br);
+	br_multicast_open_locked(br);
 	list_for_each_entry(port, &br->port_list, list)
 		__br_multicast_enable_port_ctx(&port->multicast_ctx);
 
