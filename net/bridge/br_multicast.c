@@ -1140,8 +1140,10 @@ static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
 
 	lockdep_assert_held_once(&brmctx->br->multicast_lock);
 
-	if (!br_opt_get(brmctx->br, BROPT_MULTICAST_ENABLED))
+	if (!br_opt_get(brmctx->br, BROPT_MULTICAST_ENABLED)) {
 		force_inactive = true;
+		goto update;
+	}
 
 	if (br_opt_get(brmctx->br, BROPT_MCAST_VLAN_SNOOPING_ENABLED)) {
 		/* with per-vlan snooping enabled there is an extra per-vlan
@@ -1149,11 +1151,10 @@ static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
 		 */
 		if (br_multicast_ctx_vlan_global_disabled(brmctx))
 			force_inactive = true;
-
 		/* with per-vlan snooping enabled the non-vlan multicast
 		 * snooping context is inactive
 		 */
-		if (!br_multicast_ctx_is_vlan(brmctx))
+		else if (!br_multicast_ctx_is_vlan(brmctx))
 			force_inactive = true;
 	} else {
 		/* with per-vlan snooping disabled a vlan multicast
@@ -1163,6 +1164,7 @@ static void br_multicast_update_active(struct net_bridge_mcast *brmctx)
 			force_inactive = true;
 	}
 
+update:
 	br_ip4_multicast_update_active(brmctx, force_inactive);
 	br_ip6_multicast_update_active(brmctx, force_inactive);
 
