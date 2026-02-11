@@ -1424,12 +1424,12 @@ static struct sk_buff *br_multicast_alloc_query(struct net_bridge_mcast *brmctx,
 
 static void br_ip4_multicast_assert_inactive(struct net_bridge_mcast *brmctx)
 {
-	WARN_ON(br_multicast_snooping_active(brmctx, htons(ETH_P_IP), NULL));
+	WARN_ON_ONCE(br_multicast_snooping_active(brmctx, htons(ETH_P_IP), NULL));
 }
 
 static void br_ip6_multicast_assert_inactive(struct net_bridge_mcast *brmctx)
 {
-	WARN_ON(br_multicast_snooping_active(brmctx, htons(ETH_P_IPV6), NULL));
+	WARN_ON_ONCE(br_multicast_snooping_active(brmctx, htons(ETH_P_IPV6), NULL));
 }
 
 static void br_multicast_assert_inactive(struct net_bridge_mcast *brmctx)
